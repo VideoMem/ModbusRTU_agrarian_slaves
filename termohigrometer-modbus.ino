@@ -212,6 +212,17 @@ uint8_t writeDigitalOut(uint8_t fc, uint16_t address, uint16_t length)
     return STATUS_OK;
 }
 
+union Epoch {
+    uint32_t timestamp;
+    uint16_t nibbles[2];
+};
+
+union Epoch readRTCEpoch(DateTime& now) {
+    union Epoch epoch;
+    epoch.timestamp = now.getEpoch();
+    return epoch;
+}
+
 uint16_t readRTC(DateTime& now, uint8_t reg) {
     switch(reg) {
         case 0:
@@ -235,59 +246,101 @@ uint16_t readRTC(DateTime& now, uint8_t reg) {
         case 6:
             return now.dayOfWeek();
         break;
+        case 7:
+            return readRTCEpoch(now).nibbles[0];
+        break;
+        case 8:
+            return readRTCEpoch(now).nibbles[1];
+        break;
+        default:
+            blinkTimer.setMS(BLINK_ON_ERROR);
+        break;
     }
 }
 
 uint8_t writeRTCYY(uint16_t year) {
-    DateTime now = rtc.now();
-    DateTime dt(year, now.month(), now.date(), now.hour(), now.minute(), now.second(), now.dayOfWeek());
-    rtc.setDateTime(dt);
-    return STATUS_OK;
+    if(year >= 2000) {
+        DateTime now = rtc.now();
+        DateTime dt(year, now.month(), now.date(), now.hour(), now.minute(), now.second(), now.dayOfWeek());
+        rtc.setDateTime(dt);
+        return STATUS_OK;
+    } else
+        return STATUS_ILLEGAL_DATA_VALUE;
 }
 
 uint8_t writeRTCMM(uint16_t month) {
-    DateTime now = rtc.now();
-    DateTime dt(now.year(), month, now.date(), now.hour(), now.minute(), now.second(), now.dayOfWeek());
-    rtc.setDateTime(dt);
-    return STATUS_OK;
+    if(month > 0 && month < 13) {
+        DateTime now = rtc.now();
+        DateTime dt(now.year(), month, now.date(), now.hour(), now.minute(), now.second(), now.dayOfWeek());
+        rtc.setDateTime(dt);
+        return STATUS_OK;
+    } else
+        return STATUS_ILLEGAL_DATA_VALUE;
 }
 
 uint8_t writeRTCDD(uint16_t day) {
-    DateTime now = rtc.now();
-    DateTime dt(now.year(), now.month(), day, now.hour(), now.minute(), now.second(), now.dayOfWeek());
-    rtc.setDateTime(dt);
-    return STATUS_OK;
+    if(day > 0 && day < 32) {
+        DateTime now = rtc.now();
+        DateTime dt(now.year(), now.month(), day, now.hour(), now.minute(), now.second(), now.dayOfWeek());
+        rtc.setDateTime(dt);
+        return STATUS_OK;
+    } else
+        return STATUS_ILLEGAL_DATA_VALUE;
 }
 
 uint8_t writeRTCHH(uint16_t hour) {
-    DateTime now = rtc.now();
-    DateTime dt(now.year(), now.month(), now.date(), hour, now.minute(), now.second(), now.dayOfWeek());
-    rtc.setDateTime(dt);
-    return STATUS_OK;
+    if(hour >= 0 && hour < 24) {
+        DateTime now = rtc.now();
+        DateTime dt(now.year(), now.month(), now.date(), hour, now.minute(), now.second(), now.dayOfWeek());
+        rtc.setDateTime(dt);
+        return STATUS_OK;
+    } else
+        return STATUS_ILLEGAL_DATA_VALUE;
 }
 
 uint8_t writeRTCmm(uint16_t minute) {
-    DateTime now = rtc.now();
-    DateTime dt(now.year(), now.month(), now.date(), now.hour(), minute, now.second(), now.dayOfWeek());
-    rtc.setDateTime(dt);
-    return STATUS_OK;
+    if(minute >= 0 && minute < 60) {
+        DateTime now = rtc.now();
+        DateTime dt(now.year(), now.month(), now.date(), now.hour(), minute, now.second(), now.dayOfWeek());
+        rtc.setDateTime(dt);
+        return STATUS_OK;
+    } else
+        return STATUS_ILLEGAL_DATA_VALUE;
 }
 
 uint8_t writeRTCSS(uint16_t second) {
-    DateTime now = rtc.now();
-    DateTime dt(now.year(), now.month(), now.date(), now.hour(), now.minute(), second, now.dayOfWeek());
-    rtc.setDateTime(dt);
-    return STATUS_OK;
+    if(second >= 0 && second < 60) {
+        DateTime now = rtc.now();
+        DateTime dt(now.year(), now.month(), now.date(), now.hour(), now.minute(), second, now.dayOfWeek());
+        rtc.setDateTime(dt);
+        return STATUS_OK;
+    } else
+        return STATUS_ILLEGAL_DATA_VALUE;
 }
 
 uint8_t writeRTCDW(uint16_t dayOfWeek) {
-    DateTime now = rtc.now();
-    DateTime dt(now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second(), dayOfWeek);
-    rtc.setDateTime(dt);
-    return STATUS_OK;
+    if(dayOfWeek >= 0 && dayOfWeek < 7) {
+        DateTime now = rtc.now();
+        DateTime dt(now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second(), dayOfWeek);
+        rtc.setDateTime(dt);
+        return STATUS_OK;
+    } else
+        return STATUS_ILLEGAL_DATA_VALUE;
 }
 
-uint8_t writeRTC(uint8_t reg, uint16_t value) {
+union Epoch writeRTCEpoch(uint16_t value, uint8_t nibble) {
+    DateTime now = rtc.now();
+    union Epoch epoch;
+    epoch.timestamp = now.getEpoch();
+    epoch.nibbles[nibble] = value;
+    return epoch;
+}
+
+void commitEpoch(union Epoch &epoch) {
+    rtc.setEpoch(epoch.timestamp);
+}
+
+uint8_t writeRTC(uint8_t reg, uint16_t value, union Epoch &epoch) {
     DateTime now = rtc.now();
     switch(reg) {
         case 0:
@@ -310,6 +363,13 @@ uint8_t writeRTC(uint8_t reg, uint16_t value) {
             break;
         case 6:
             writeRTCDW(value);
+            break;
+        case 7:
+            epoch = writeRTCEpoch(value, 0);
+            break;
+        case 8:
+            epoch = writeRTCEpoch(value, 1);
+            commitEpoch(epoch);
             break;
         default:
             blinkTimer.setMS(BLINK_ON_ERROR);
@@ -336,7 +396,7 @@ uint8_t readMemory(uint8_t fc, uint16_t address, uint16_t length)
             // Write the pinMode from EEPROM to the response buffer.
             slave.writeRegisterToBuffer(i, value);
         }
-        else if (address + i >= RTC_MEM_START && address + i < RTC_MEM_START + 7) {
+        else if (address + i >= RTC_MEM_START && address + i < RTC_MEM_START + 9) {
             //handles RTC
             uint8_t offset = address + i - RTC_MEM_START;
             uint16_t value = readRTC(now, offset);
@@ -358,6 +418,7 @@ uint8_t readMemory(uint8_t fc, uint16_t address, uint16_t length)
 // Handle the function codes Write Holding Register(s) (FC=06, FC=16) and write data to the eeprom.
 uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
 {
+    union Epoch epoch;
     // Write the received data to EEPROM.
     for (int i = 0; i < length; i++)
     {
@@ -387,11 +448,11 @@ uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
             pinMode(digital_pins[address + i], value);
 
         }
-        else if (address + i >= RTC_MEM_START && address + i < RTC_MEM_START + 7) {
+        else if (address + i >= RTC_MEM_START && address + i < RTC_MEM_START + 9) {
             //handles RTC
             uint8_t offset = address + i - RTC_MEM_START;
             uint16_t value = slave.readRegisterFromBuffer(i);
-            if (writeRTC(offset, value) != STATUS_OK)
+            if (writeRTC(offset, value, epoch) != STATUS_OK)
                 return STATUS_ILLEGAL_DATA_VALUE;
         } else {
             // Read the value from the input buffer.
