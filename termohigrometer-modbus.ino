@@ -30,15 +30,20 @@
 #include "Timers.h"
 #define BLINK_NO_ERROR 500
 #define BLINK_ON_ERROR 50
+#define BLINK_FACTORY_RESET 3000
 
 #define SLAVE_ID 1           // The Modbus slave ID, change to the ID you want to use.
 #define RS485_CTRL_PIN 8     // Change to the pin the RE/DE pin of the RS485 controller is connected to.
 #define SERIAL_BAUDRATE 9600 // Change to the baudrate you want to use for Modbus communication.
 #define SERIAL_PORT Serial   // Serial port to use for RS485 communication, change to the port you're using.
+#define FACTORY_RESET 2
+#define RELAY0 3
+#define RELAY1 4
+
 
 // The position in the array determines the address. Position 0 will correspond to Coil, Discrete input or Input register 0.
-uint8_t digital_pins[] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}; // Add the pins you want to read as a Discrete input.
-uint8_t analog_pins[] = {A0, A1, A2, A3, A4, A5};                  // Add the pins you want to read as a Input register.
+uint8_t digital_pins[] = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12};    // Add the pins you want to read as a Discrete input.
+uint8_t analog_pins[] = {A0, A1, A2, A3, A4, A5};        // Add the pins you want to read as a Input register.
 
 // The EEPROM layout is as follows
 // The first 50 bytes are reserved for storing digital pin pinMode_setting
@@ -56,14 +61,35 @@ Timer blinkTimer;
 Toggle blinker;
 unsigned char ledPin = 13;
 
+void setupResetDiag() {
+    pinMode(FACTORY_RESET, INPUT_PULLUP);
+    pinMode(FACTORY_RESET, INPUT);   
+    digitalWrite(RELAY0, 1);
+    digitalWrite(RELAY1, 1);    
+    pinMode(RELAY0, OUTPUT);  
+    pinMode(RELAY1, OUTPUT);  
+    pinMode(ledPin, OUTPUT);   
+    blinkTimer.setMS(BLINK_NO_ERROR);
+    uint8_t id;
+    EEPROM.get(0, id);
+    slave.setUnitAddress(id);
+}
+
+// default slave ID 
+void factoryDefaults() {
+    EEPROM.put(0, SLAVE_ID);
+    slave.setUnitAddress(SLAVE_ID);
+}
+
 void setup()
 {
     // Set the defined digital pins to the value stored in EEPROM.
+    // EEPROM slot 0 reserved for slave ID
     for (uint16_t i = 0; i < digital_pins_size; i++)
     {
         uint8_t pinMode_setting;
         // Get the pinMode_setting of this digital pin from the EEPROM.
-        EEPROM.get(i, pinMode_setting);
+        EEPROM.get(i+1, pinMode_setting);
 
         pinMode(digital_pins[i], pinMode_setting);
     }
@@ -74,8 +100,20 @@ void setup()
         pinMode(analog_pins[i], INPUT);
     }
 
-    pinMode(ledPin, OUTPUT);
-    blinkTimer.setMS(BLINK_NO_ERROR);
+    setupResetDiag();
+
+    if (digitalRead(FACTORY_RESET) == 0) {
+        blinkTimer.setMS(BLINK_FACTORY_RESET);
+        digitalWrite(ledPin, 1);
+        do {
+            blinkTimer.update();
+        } while (!blinkTimer.event());
+        if (digitalRead(FACTORY_RESET) == 0) 
+            factoryDefaults();
+        blinkTimer.setMS(BLINK_NO_ERROR);
+        blinkTimer.reset();  
+    }
+    
     
     // Register functions to call when a certain function code is received.
     slave.cbVector[CB_READ_COILS] = readDigital;
@@ -214,7 +252,13 @@ uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
             
 
             // Check if the value is 0 (INPUT) or 1 (OUTPUT).
-            if (value != INPUT && value != OUTPUT)
+            if (value != INPUT && value != OUTPUT && address > 0)
+            {
+                return STATUS_ILLEGAL_DATA_VALUE;
+            }
+
+
+            if ((value < 1 || value > 247) && address == 0)
             {
                 return STATUS_ILLEGAL_DATA_VALUE;
             }
@@ -224,6 +268,9 @@ uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
 
             // Set the pinmode to the received value.
             pinMode(digital_pins[address + i], value);
+
+            if (address == 0)
+              slave.setUnitAddress(value);
         }
         else
         {
