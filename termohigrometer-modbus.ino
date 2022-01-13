@@ -1,3 +1,5 @@
+
+
 /*
     Modbus slave example.
 
@@ -26,6 +28,8 @@
 
 #include <EEPROM.h>
 #include <ModbusSlave.h>
+#include <Sodaq_DS3231.h>
+#include <Wire.h>
 #include "Toggle.h"
 #include "Timers.h"
 #define BLINK_NO_ERROR 500
@@ -39,11 +43,11 @@
 #define FACTORY_RESET 2
 #define RELAY0 3
 #define RELAY1 4
-
+#define RTC_MEM_START 49
 
 // The position in the array determines the address. Position 0 will correspond to Coil, Discrete input or Input register 0.
 uint8_t digital_pins[] = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12};    // Add the pins you want to read as a Discrete input.
-uint8_t analog_pins[] = {A0, A1, A2, A3, A4, A5};        // Add the pins you want to read as a Input register.
+uint8_t analog_pins[] = {A0, A1, A2, A3};                      // Add the pins you want to read as a Input register.
 
 // The EEPROM layout is as follows
 // The first 50 bytes are reserved for storing digital pin pinMode_setting
@@ -79,6 +83,13 @@ void setupResetDiag() {
 void factoryDefaults() {
     EEPROM.put(0, SLAVE_ID);
     slave.setUnitAddress(SLAVE_ID);
+    DateTime dt(2022, 1, 13, 0, 0, 0, 4);
+    rtc.setDateTime(dt);  //Establece fecha y hora cargada en "dt"
+}
+
+void rtcInit() {
+  Wire.begin();         //Inicializa la comunicacion con el RTC
+  rtc.begin();          //Inicializa el RTC
 }
 
 void setup()
@@ -101,6 +112,7 @@ void setup()
     }
 
     setupResetDiag();
+    rtcInit();
 
     if (digitalRead(FACTORY_RESET) == 0) {
         blinkTimer.setMS(BLINK_FACTORY_RESET);
@@ -162,38 +174,6 @@ uint8_t readDigital(uint8_t fc, uint16_t address, uint16_t length)
     return STATUS_OK;
 }
 
-// Handle the function code Read Holding Registers (FC=03) and write back the values from the EEPROM (holding registers).
-uint8_t readMemory(uint8_t fc, uint16_t address, uint16_t length)
-{
-    // Read the requested EEPROM registers.
-    for (int i = 0; i < length; i++)
-    {
-        // Below 50 is reserved for pinModes, above 50 is free to use.
-        if (address + i <= 50)
-        {
-            uint8_t value;
-
-            // Read a value from the EEPROM.
-            EEPROM.get((address + i), value);
-
-            // Write the pinMode from EEPROM to the response buffer.
-            slave.writeRegisterToBuffer(i, value);
-        }
-        else
-        {
-            uint16_t value;
-
-            // Read a value from the EEPROM.
-            EEPROM.get(address + (i * 2), value);
-
-            // Write the value from EEPROM to the response buffer.
-            slave.writeRegisterToBuffer(i, value);
-        }
-    }
-
-    return STATUS_OK;
-}
-
 // Handle the function code Read Input Registers (FC=04) and write back the values from the analog input pins (input registers).
 uint8_t readAnalogIn(uint8_t fc, uint16_t address, uint16_t length)
 {
@@ -232,24 +212,159 @@ uint8_t writeDigitalOut(uint8_t fc, uint16_t address, uint16_t length)
     return STATUS_OK;
 }
 
+uint16_t readRTC(DateTime& now, uint8_t reg) {
+    switch(reg) {
+        case 0:
+            return now.year();
+        break;
+        case 1:
+            return now.month();
+        break;
+        case 2:
+            return now.date();
+        break;
+        case 3:
+            return now.hour();
+        break;
+        case 4:
+            return now.minute();
+        break;
+        case 5:
+            return now.second();
+        break;
+        case 6:
+            return now.dayOfWeek();
+        break;
+    }
+}
+
+uint8_t writeRTCYY(uint16_t year) {
+    DateTime now = rtc.now();
+    DateTime dt(year, now.month(), now.date(), now.hour(), now.minute(), now.second(), now.dayOfWeek());
+    rtc.setDateTime(dt);
+    return STATUS_OK;
+}
+
+uint8_t writeRTCMM(uint16_t month) {
+    DateTime now = rtc.now();
+    DateTime dt(now.year(), month, now.date(), now.hour(), now.minute(), now.second(), now.dayOfWeek());
+    rtc.setDateTime(dt);
+    return STATUS_OK;
+}
+
+uint8_t writeRTCDD(uint16_t day) {
+    DateTime now = rtc.now();
+    DateTime dt(now.year(), now.month(), day, now.hour(), now.minute(), now.second(), now.dayOfWeek());
+    rtc.setDateTime(dt);
+    return STATUS_OK;
+}
+
+uint8_t writeRTCHH(uint16_t hour) {
+    DateTime now = rtc.now();
+    DateTime dt(now.year(), now.month(), now.date(), hour, now.minute(), now.second(), now.dayOfWeek());
+    rtc.setDateTime(dt);
+    return STATUS_OK;
+}
+
+uint8_t writeRTCmm(uint16_t minute) {
+    DateTime now = rtc.now();
+    DateTime dt(now.year(), now.month(), now.date(), now.hour(), minute, now.second(), now.dayOfWeek());
+    rtc.setDateTime(dt);
+    return STATUS_OK;
+}
+
+uint8_t writeRTCSS(uint16_t second) {
+    DateTime now = rtc.now();
+    DateTime dt(now.year(), now.month(), now.date(), now.hour(), now.minute(), second, now.dayOfWeek());
+    rtc.setDateTime(dt);
+    return STATUS_OK;
+}
+
+uint8_t writeRTCDW(uint16_t dayOfWeek) {
+    DateTime now = rtc.now();
+    DateTime dt(now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second(), dayOfWeek);
+    rtc.setDateTime(dt);
+    return STATUS_OK;
+}
+
+uint8_t writeRTC(uint8_t reg, uint16_t value) {
+    DateTime now = rtc.now();
+    switch(reg) {
+        case 0:
+            writeRTCYY(value);
+            break;
+        case 1:
+            writeRTCMM(value);
+            break;
+        case 2:
+            writeRTCDD(value);
+            break;
+        case 3:
+            writeRTCHH(value);
+            break;
+        case 4:
+            writeRTCmm(value);
+            break;
+        case 5:
+            writeRTCSS(value);
+            break;
+        case 6:
+            writeRTCDW(value);
+            break;
+        default:
+            blinkTimer.setMS(BLINK_ON_ERROR);
+            break;
+    }
+    return STATUS_OK;
+}
+
+// Handle the function code Read Holding Registers (FC=03) and write back the values from the EEPROM (holding registers).
+uint8_t readMemory(uint8_t fc, uint16_t address, uint16_t length)
+{
+    // Read the requested EEPROM registers.
+    DateTime now = rtc.now();
+    for (int i = 0; i < length; i++)
+    {
+        // Below RTC_MEM_START is reserved for pinModes
+        if (address + i < RTC_MEM_START)
+        {
+            uint8_t value;
+
+            // Read a value from the EEPROM.
+            EEPROM.get((address + i), value);
+
+            // Write the pinMode from EEPROM to the response buffer.
+            slave.writeRegisterToBuffer(i, value);
+        }
+        else if (address + i >= RTC_MEM_START && address + i < RTC_MEM_START + 7) {
+            //handles RTC
+            uint8_t offset = address + i - RTC_MEM_START;
+            uint16_t value = readRTC(now, offset);
+            slave.writeRegisterToBuffer(i, value);
+        } else {
+            uint16_t value;
+
+            // Read a value from the EEPROM.
+            EEPROM.get(address + (i * 2), value);
+
+            // Write the value from EEPROM to the response buffer.
+            slave.writeRegisterToBuffer(i, value);
+        }
+    }
+
+    return STATUS_OK;
+}
+
 // Handle the function codes Write Holding Register(s) (FC=06, FC=16) and write data to the eeprom.
 uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
 {
     // Write the received data to EEPROM.
     for (int i = 0; i < length; i++)
     {
-        if (address + i <= 50)
+        if (address + i < RTC_MEM_START)
         {
-            // Check if the requested addresses exist in the array.
-            if (address + i > digital_pins_size)
-            {
-                return STATUS_ILLEGAL_DATA_ADDRESS;
-            }
-
             // Read the value from the input buffer.
             uint8_t value = slave.readRegisterFromBuffer(i);
-
-            
 
             // Check if the value is 0 (INPUT) or 1 (OUTPUT).
             if (value != INPUT && value != OUTPUT && address > 0)
@@ -257,11 +372,13 @@ uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
                 return STATUS_ILLEGAL_DATA_VALUE;
             }
 
-
             if ((value < 1 || value > 247) && address == 0)
             {
                 return STATUS_ILLEGAL_DATA_VALUE;
             }
+
+            if (address == 0)
+                slave.setUnitAddress(value);
 
             // Store the received value in the EEPROM.
             EEPROM.put(address + i, value);
@@ -269,11 +386,14 @@ uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
             // Set the pinmode to the received value.
             pinMode(digital_pins[address + i], value);
 
-            if (address == 0)
-              slave.setUnitAddress(value);
         }
-        else
-        {
+        else if (address + i >= RTC_MEM_START && address + i < RTC_MEM_START + 7) {
+            //handles RTC
+            uint8_t offset = address + i - RTC_MEM_START;
+            uint16_t value = slave.readRegisterFromBuffer(i);
+            if (writeRTC(offset, value) != STATUS_OK)
+                return STATUS_ILLEGAL_DATA_VALUE;
+        } else {
             // Read the value from the input buffer.
             uint16_t value = slave.readRegisterFromBuffer(i);
 
