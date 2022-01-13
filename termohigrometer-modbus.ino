@@ -250,6 +250,8 @@ uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
 {
     poolNotify();
     union Epoch epoch;
+    DateTime now = rtc.now();
+
     // Write the received data to EEPROM.
     for (int i = 0; i < length; i++)
     {
@@ -283,7 +285,7 @@ uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
             //handles RTC
             uint8_t offset = address + i - RTC_MEM_START;
             uint16_t value = slave.readRegisterFromBuffer(i);
-            if (writeRTC(offset, value, epoch) != STATUS_OK)
+            if (writeRTC(now, offset, value, epoch) != STATUS_OK)
                 return STATUS_ILLEGAL_DATA_VALUE;
         } else {
             // Read the value from the input buffer.

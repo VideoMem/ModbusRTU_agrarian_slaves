@@ -6,7 +6,7 @@
 
 union Epoch {
     uint32_t timestamp;
-    int16_t nibbles[2];
+    uint16_t nibbles[2];
 };
 
 union Epoch readRTCEpoch(DateTime& now) {
@@ -45,7 +45,6 @@ uint16_t readRTC(DateTime& now, uint8_t reg) {
             return readRTCEpoch(now).nibbles[1];
             break;
         default:
-            blinkTimer.setMS(BLINK_ON_ERROR);
             break;
     }
 }
@@ -120,8 +119,7 @@ uint8_t writeRTCDW(uint16_t dayOfWeek) {
         return STATUS_ILLEGAL_DATA_VALUE;
 }
 
-union Epoch writeRTCEpoch(uint16_t value, uint8_t nibble) {
-    DateTime now = rtc.now();
+static union Epoch writeRTCEpoch(DateTime& now, uint16_t value, uint8_t nibble) {
     union Epoch epoch;
     epoch.timestamp = now.getEpoch();
     epoch.nibbles[nibble] = value;
@@ -132,39 +130,38 @@ void commitEpoch(union Epoch &epoch) {
     rtc.setEpoch(epoch.timestamp);
 }
 
-uint8_t writeRTC(uint8_t reg, uint16_t value, union Epoch &epoch) {
-    DateTime now = rtc.now();
+uint8_t writeRTC(DateTime& now, uint8_t reg, uint16_t value, union Epoch &epoch) {
     switch(reg) {
         case 0:
-            writeRTCYY(value);
+            return writeRTCYY(value);
             break;
         case 1:
-            writeRTCMM(value);
+            return writeRTCMM(value);
             break;
         case 2:
-            writeRTCDD(value);
+            return writeRTCDD(value);
             break;
         case 3:
-            writeRTCHH(value);
+            return writeRTCHH(value);
             break;
         case 4:
-            writeRTCmm(value);
+            return writeRTCmm(value);
             break;
         case 5:
-            writeRTCSS(value);
+            return writeRTCSS(value);
             break;
         case 6:
-            writeRTCDW(value);
+            return writeRTCDW(value);
             break;
         case 7:
-            epoch = writeRTCEpoch(value, 0);
+            epoch = writeRTCEpoch(now, value, 0);
             break;
         case 8:
-            epoch = writeRTCEpoch(value, 1);
+            epoch = writeRTCEpoch(now, value, 1);
             commitEpoch(epoch);
             break;
         default:
-            blinkTimer.setMS(BLINK_ON_ERROR);
+            return STATUS_ILLEGAL_DATA_VALUE;
             break;
     }
     return STATUS_OK;
