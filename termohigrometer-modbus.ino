@@ -1,31 +1,3 @@
-
-
-/*
-    Modbus slave example.
-
-    Control and Read Arduino I/Os using Modbus serial connection.
-    
-    This sketch show how to use the callback vector for reading and
-    controlling Arduino I/Os.
-    
-    * Control digital pins mode using holding registers 0 .. 50.
-    * Control digital output pins as modbus coils.
-    * Read digital inputs as discreet inputs.
-    * Read analog inputs as input registers.
-    * Write and Read EEPROM as holding registers.
-
-    Created 08-12-2015
-    By Yaacov Zamir
-
-    Updated 31-03-2020
-    By Yorick Smilda
-
-    https://github.com/yaacov/ArduinoModbusSlave
-
-*/
-
-
-
 #include <EEPROM.h>
 #include <ModbusSlave.h>
 #include <Sodaq_DS3231.h>
@@ -34,7 +6,28 @@
 #include "Timers.h"
 #define BLINK_NO_ERROR 500
 #define BLINK_ON_ERROR 50
+#define BLINK_ON_POLL 75
+#define BLINK_POLL_MS 1400
 #define BLINK_FACTORY_RESET 3000
+
+static Timer blinkTimer;
+static Timer commandTimer;
+static Toggle blinker;
+
+unsigned char ledPin = 13;
+static unsigned char onpoll = 0;
+
+void pollDrive() {
+    if(commandTimer.event()) {
+        onpoll = 0;
+    }
+    commandTimer.update();
+}
+
+void poolNotify() {
+    commandTimer.reset();
+    onpoll = 1;
+}
 
 #define SLAVE_ID 1           // The Modbus slave ID, change to the ID you want to use.
 #define RS485_CTRL_PIN 8     // Change to the pin the RE/DE pin of the RS485 controller is connected to.
@@ -43,7 +36,9 @@
 #define FACTORY_RESET 2
 #define RELAY0 3
 #define RELAY1 4
-#define RTC_MEM_START 49
+
+// platform specific modules
+#include "RTC.h"
 
 // The position in the array determines the address. Position 0 will correspond to Coil, Discrete input or Input register 0.
 uint8_t digital_pins[] = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12};    // Add the pins you want to read as a Discrete input.
@@ -61,10 +56,6 @@ uint8_t analog_pins_size = sizeof(analog_pins) / sizeof(analog_pins[0]);    // G
 // Modbus object declaration
 Modbus slave(SERIAL_PORT, SLAVE_ID, RS485_CTRL_PIN);
 
-Timer blinkTimer;
-Toggle blinker;
-unsigned char ledPin = 13;
-
 void setupResetDiag() {
     pinMode(FACTORY_RESET, INPUT_PULLUP);
     pinMode(FACTORY_RESET, INPUT);   
@@ -74,6 +65,7 @@ void setupResetDiag() {
     pinMode(RELAY1, OUTPUT);  
     pinMode(ledPin, OUTPUT);   
     blinkTimer.setMS(BLINK_NO_ERROR);
+    commandTimer.setMS(BLINK_POLL_MS);
     uint8_t id;
     EEPROM.get(0, id);
     slave.setUnitAddress(id);
@@ -83,8 +75,6 @@ void setupResetDiag() {
 void factoryDefaults() {
     EEPROM.put(0, SLAVE_ID);
     slave.setUnitAddress(SLAVE_ID);
-    DateTime dt(2022, 1, 13, 0, 0, 0, 4);
-    rtc.setDateTime(dt);  //Establece fecha y hora cargada en "dt"
 }
 
 void rtcInit() {
@@ -147,7 +137,9 @@ void loop()
     // And if there is a function registered to the received function code, this function will be executed.
     slave.poll();
     ledDrive();
+    pollDrive();
 }
+
 
 // Modbus handler functions
 // The handler functions must return an uint8_t and take the following parameters:
@@ -158,6 +150,7 @@ void loop()
 // Handle the function codes Read Input Status (FC=01/02) and write back the values from the digital pins (input status).
 uint8_t readDigital(uint8_t fc, uint16_t address, uint16_t length)
 {
+    poolNotify();
     // Check if the requested addresses exist in the array
     if (address > digital_pins_size || (address + length) > digital_pins_size)
     {
@@ -177,6 +170,7 @@ uint8_t readDigital(uint8_t fc, uint16_t address, uint16_t length)
 // Handle the function code Read Input Registers (FC=04) and write back the values from the analog input pins (input registers).
 uint8_t readAnalogIn(uint8_t fc, uint16_t address, uint16_t length)
 {
+    poolNotify();
     // Check if the requested addresses exist in the array
     if (address > analog_pins_size || (address + length) > analog_pins_size)
     {
@@ -196,6 +190,7 @@ uint8_t readAnalogIn(uint8_t fc, uint16_t address, uint16_t length)
 // Handle the function codes Force Single Coil (FC=05) and Force Multiple Coils (FC=15) and set the digital output pins (coils).
 uint8_t writeDigitalOut(uint8_t fc, uint16_t address, uint16_t length)
 {
+    poolNotify();
     // Check if the requested addresses exist in the array
     if (address > digital_pins_size || (address + length) > digital_pins_size)
     {
@@ -212,175 +207,10 @@ uint8_t writeDigitalOut(uint8_t fc, uint16_t address, uint16_t length)
     return STATUS_OK;
 }
 
-union Epoch {
-    uint32_t timestamp;
-    uint16_t nibbles[2];
-};
-
-union Epoch readRTCEpoch(DateTime& now) {
-    union Epoch epoch;
-    epoch.timestamp = now.getEpoch();
-    return epoch;
-}
-
-uint16_t readRTC(DateTime& now, uint8_t reg) {
-    switch(reg) {
-        case 0:
-            return now.year();
-        break;
-        case 1:
-            return now.month();
-        break;
-        case 2:
-            return now.date();
-        break;
-        case 3:
-            return now.hour();
-        break;
-        case 4:
-            return now.minute();
-        break;
-        case 5:
-            return now.second();
-        break;
-        case 6:
-            return now.dayOfWeek();
-        break;
-        case 7:
-            return readRTCEpoch(now).nibbles[0];
-        break;
-        case 8:
-            return readRTCEpoch(now).nibbles[1];
-        break;
-        default:
-            blinkTimer.setMS(BLINK_ON_ERROR);
-        break;
-    }
-}
-
-uint8_t writeRTCYY(uint16_t year) {
-    if(year >= 2000) {
-        DateTime now = rtc.now();
-        DateTime dt(year, now.month(), now.date(), now.hour(), now.minute(), now.second(), now.dayOfWeek());
-        rtc.setDateTime(dt);
-        return STATUS_OK;
-    } else
-        return STATUS_ILLEGAL_DATA_VALUE;
-}
-
-uint8_t writeRTCMM(uint16_t month) {
-    if(month > 0 && month < 13) {
-        DateTime now = rtc.now();
-        DateTime dt(now.year(), month, now.date(), now.hour(), now.minute(), now.second(), now.dayOfWeek());
-        rtc.setDateTime(dt);
-        return STATUS_OK;
-    } else
-        return STATUS_ILLEGAL_DATA_VALUE;
-}
-
-uint8_t writeRTCDD(uint16_t day) {
-    if(day > 0 && day < 32) {
-        DateTime now = rtc.now();
-        DateTime dt(now.year(), now.month(), day, now.hour(), now.minute(), now.second(), now.dayOfWeek());
-        rtc.setDateTime(dt);
-        return STATUS_OK;
-    } else
-        return STATUS_ILLEGAL_DATA_VALUE;
-}
-
-uint8_t writeRTCHH(uint16_t hour) {
-    if(hour >= 0 && hour < 24) {
-        DateTime now = rtc.now();
-        DateTime dt(now.year(), now.month(), now.date(), hour, now.minute(), now.second(), now.dayOfWeek());
-        rtc.setDateTime(dt);
-        return STATUS_OK;
-    } else
-        return STATUS_ILLEGAL_DATA_VALUE;
-}
-
-uint8_t writeRTCmm(uint16_t minute) {
-    if(minute >= 0 && minute < 60) {
-        DateTime now = rtc.now();
-        DateTime dt(now.year(), now.month(), now.date(), now.hour(), minute, now.second(), now.dayOfWeek());
-        rtc.setDateTime(dt);
-        return STATUS_OK;
-    } else
-        return STATUS_ILLEGAL_DATA_VALUE;
-}
-
-uint8_t writeRTCSS(uint16_t second) {
-    if(second >= 0 && second < 60) {
-        DateTime now = rtc.now();
-        DateTime dt(now.year(), now.month(), now.date(), now.hour(), now.minute(), second, now.dayOfWeek());
-        rtc.setDateTime(dt);
-        return STATUS_OK;
-    } else
-        return STATUS_ILLEGAL_DATA_VALUE;
-}
-
-uint8_t writeRTCDW(uint16_t dayOfWeek) {
-    if(dayOfWeek >= 0 && dayOfWeek < 7) {
-        DateTime now = rtc.now();
-        DateTime dt(now.year(), now.month(), now.date(), now.hour(), now.minute(), now.second(), dayOfWeek);
-        rtc.setDateTime(dt);
-        return STATUS_OK;
-    } else
-        return STATUS_ILLEGAL_DATA_VALUE;
-}
-
-union Epoch writeRTCEpoch(uint16_t value, uint8_t nibble) {
-    DateTime now = rtc.now();
-    union Epoch epoch;
-    epoch.timestamp = now.getEpoch();
-    epoch.nibbles[nibble] = value;
-    return epoch;
-}
-
-void commitEpoch(union Epoch &epoch) {
-    rtc.setEpoch(epoch.timestamp);
-}
-
-uint8_t writeRTC(uint8_t reg, uint16_t value, union Epoch &epoch) {
-    DateTime now = rtc.now();
-    switch(reg) {
-        case 0:
-            writeRTCYY(value);
-            break;
-        case 1:
-            writeRTCMM(value);
-            break;
-        case 2:
-            writeRTCDD(value);
-            break;
-        case 3:
-            writeRTCHH(value);
-            break;
-        case 4:
-            writeRTCmm(value);
-            break;
-        case 5:
-            writeRTCSS(value);
-            break;
-        case 6:
-            writeRTCDW(value);
-            break;
-        case 7:
-            epoch = writeRTCEpoch(value, 0);
-            break;
-        case 8:
-            epoch = writeRTCEpoch(value, 1);
-            commitEpoch(epoch);
-            break;
-        default:
-            blinkTimer.setMS(BLINK_ON_ERROR);
-            break;
-    }
-    return STATUS_OK;
-}
-
 // Handle the function code Read Holding Registers (FC=03) and write back the values from the EEPROM (holding registers).
 uint8_t readMemory(uint8_t fc, uint16_t address, uint16_t length)
 {
+    poolNotify();
     // Read the requested EEPROM registers.
     DateTime now = rtc.now();
     for (int i = 0; i < length; i++)
@@ -418,6 +248,7 @@ uint8_t readMemory(uint8_t fc, uint16_t address, uint16_t length)
 // Handle the function codes Write Holding Register(s) (FC=06, FC=16) and write data to the eeprom.
 uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length)
 {
+    poolNotify();
     union Epoch epoch;
     // Write the received data to EEPROM.
     for (int i = 0; i < length; i++)
@@ -476,7 +307,13 @@ void ledDrive() {
     if(blinkTimer.event()) {
         blinker.change();
         blinkTimer.reset();
+        if(onpoll == 1) {
+            blinkTimer.setMS(BLINK_ON_POLL);
+        } else {
+            blinkTimer.setMS(BLINK_NO_ERROR);
+        }
     }
     
     blinkTimer.update();
 }
+
