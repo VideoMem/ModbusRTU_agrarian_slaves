@@ -16,17 +16,23 @@ Then, the short to pin 2 can be removed.
 
 # Set date/time using modpoll tool
 ```shell
-./modpoll -b 9600 -m rtu -a 1 -t 4 -c 7 -r 50 -p none -4 1 /dev/ttyUSB1 $(date +'%Y') $(date +'%m') $(date +'%d') $(date +'%H') $(date +'%M') $(date +'%S') $(date +'%w')
+modpoll -b 9600 -m rtu -a 1 -t 4 -c 7 -r 50 -p none -4 1 /dev/ttyUSB1 $(date +'%Y') $(date +'%m') $(date +'%d') $(date +'%H') $(date +'%M') $(date +'%S') $(date +'%w')
 ```
 Check RTC date
 ```shell
-/modpoll -b 9600 -m rtu -a 1 -t 4 -c 7 -r 50 -p none -4 1 /dev/ttyUSB1
+modpoll -b 9600 -m rtu -a 1 -t 4 -c 7 -r 50 -p none -4 1 /dev/ttyUSB1
 ```
 Set by Unix Epoch
 ```shell
-./modpoll -b 9600 -m rtu -a 1 -t 4:int -c 1 -r 57 -p none -4 1 /dev/ttyUSB1 $(date +"%s")
+modpoll -b 9600 -m rtu -a 1 -t 4:int -c 1 -r 57 -p none -4 1 /dev/ttyUSB1 $(date +"%s")
 ```
 Then, optionally set day of week
 ```shell
-./modpoll -b 9600 -m rtu -a 1 -t 4 -c 1 -r 56 -p none -4 1 /dev/ttyUSB1 $(date +"%w")
+modpoll -b 9600 -m rtu -a 1 -t 4 -c 1 -r 56 -p none -4 1 /dev/ttyUSB1 $(date +"%w")
 ```
+
+Or use the setDateTime.sh script included.
+```shell
+./setDateTime.sh 10 /dev/ttyUSB1
+```
+This example sets the Date/Time and day of week on slave ID 10 on /dev/ttyUSB1 network.
