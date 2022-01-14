@@ -1,6 +1,8 @@
+//#include <avr/wdt.h>
 #include <EEPROM.h>
 #include <ModbusSlave.h>
 #include <Sodaq_DS3231.h>
+#include <SoftwareSerial.h>
 #include <Wire.h>
 #include "Toggle.h"
 #include "Timers.h"
@@ -39,9 +41,12 @@ void poolNotify() {
 
 // platform specific modules
 #include "RTC.h"
+#include "XY-WTH1.h"
+
+static XYWTH termohigrometer;
 
 // The position in the array determines the address. Position 0 will correspond to Coil, Discrete input or Input register 0.
-uint8_t digital_pins[] = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12};    // Add the pins you want to read as a Discrete input.
+uint8_t digital_pins[] = {3, 4, 5, 6, 7, 8, 9, 12};    // Add the pins you want to read as a Discrete input.
 uint8_t analog_pins[] = {A0, A1, A2, A3};                      // Add the pins you want to read as a Input register.
 
 // The EEPROM layout is as follows
@@ -63,12 +68,16 @@ void setupResetDiag() {
     digitalWrite(RELAY1, 1);    
     pinMode(RELAY0, OUTPUT);  
     pinMode(RELAY1, OUTPUT);  
-    pinMode(ledPin, OUTPUT);   
+    pinMode(ledPin, OUTPUT);
+    pinMode(SSRX, INPUT);
+    pinMode(SSTX, OUTPUT);
     blinkTimer.setMS(BLINK_NO_ERROR);
     commandTimer.setMS(BLINK_POLL_MS);
     uint8_t id;
     EEPROM.get(0, id);
     slave.setUnitAddress(id);
+    termohigrometer.setup();
+    //wdt_enable(WDTO_8S);
 }
 
 // default slave ID 
@@ -127,6 +136,11 @@ void setup()
 
     // Set the serial port and slave to the given baudrate.
     SERIAL_PORT.begin(SERIAL_BAUDRATE);
+    SERIAL_PORT.println("BEGIN");
+    termohigrometer.startCapture();
+    while(true) {
+        termohigrometer.update();
+    }
     slave.begin(SERIAL_BAUDRATE);
 }
 
@@ -138,6 +152,8 @@ void loop()
     slave.poll();
     ledDrive();
     pollDrive();
+    termohigrometer.update();
+    //wdt_reset();
 }
 
 
@@ -191,9 +207,25 @@ uint8_t readAnalogIn(uint8_t fc, uint16_t address, uint16_t length)
 uint8_t writeDigitalOut(uint8_t fc, uint16_t address, uint16_t length)
 {
     poolNotify();
+
+    if (address >= 20 && address <= 21) {
+        for (int i = 0; i < length; i++) {
+            if (slave.readCoilFromBuffer(i) == 1) {
+                if (i == 0)
+                    termohigrometer.enableTempRelay();
+                else
+                    termohigrometer.enableHumidityRelay();
+            } else {
+                if (i == 0)
+                    termohigrometer.disableTempRelay();
+                else
+                    termohigrometer.disableHumidityRelay();
+            }
+        }
+        return STATUS_OK;
+
     // Check if the requested addresses exist in the array
-    if (address > digital_pins_size || (address + length) > digital_pins_size)
-    {
+    } else if (address > digital_pins_size || (address + length) > digital_pins_size) {
         return STATUS_ILLEGAL_DATA_ADDRESS;
     }
 

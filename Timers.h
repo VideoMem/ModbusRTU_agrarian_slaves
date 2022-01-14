@@ -25,7 +25,7 @@ class Timer {
   unsigned long last_read;
   unsigned long elapsed;
   unsigned long preset;
-  int enabled; 
+  int enabled;
   int trigged;
 };
 
