@@ -136,12 +136,8 @@ void setup()
 
     // Set the serial port and slave to the given baudrate.
     SERIAL_PORT.begin(SERIAL_BAUDRATE);
-    SERIAL_PORT.println("BEGIN");
-    termohigrometer.startCapture();
-    while(true) {
-        termohigrometer.update();
-    }
     slave.begin(SERIAL_BAUDRATE);
+    termohigrometer.startCapture();
 }
 
 void loop()
@@ -152,6 +148,7 @@ void loop()
     slave.poll();
     ledDrive();
     pollDrive();
+    termohigrometer.setCaptureEpoch(rtc.now().getEpoch());
     termohigrometer.update();
     //wdt_reset();
 }
@@ -263,6 +260,14 @@ uint8_t readMemory(uint8_t fc, uint16_t address, uint16_t length)
             uint8_t offset = address + i - RTC_MEM_START;
             uint16_t value = readRTC(now, offset);
             slave.writeRegisterToBuffer(i, value);
+        } else if (address + i >= TH_MEM_START && address + i < TH_MEM_START + CAPTURE_HOLD_SIZE) {
+            uint16_t offset = address + i - RTC_MEM_START;
+            CaptureRegister reg = termohigrometer.getMark(offset);
+            slave.writeRegisterToBuffer(i, reg.temperature);
+        } else if (address + i >= TH_MEM_START + CAPTURE_HOLD_SIZE && address + i < TH_MEM_START + CAPTURE_HOLD_SIZE * 2) {
+            uint16_t offset = address + i - RTC_MEM_START;
+            CaptureRegister reg = termohigrometer.getMark(offset);
+            slave.writeRegisterToBuffer(i, reg.humidity);
         } else {
             uint16_t value;
 
