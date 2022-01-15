@@ -1,3 +1,5 @@
+# ModbusRTU_agrarian_slaves
+Firmwares for small modbus RTU slave devices intended for agricultural automation
 
 After factory reset the slave id is 1
 
