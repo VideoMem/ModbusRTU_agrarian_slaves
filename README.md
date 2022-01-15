@@ -1,5 +1,33 @@
 # ModbusRTU_agrarian_slaves
-Firmwares for small modbus RTU slave devices intended for agricultural automation
+Firmware for small modbus RTU slave devices intended for agricultural automation and remote monitoring.
+
+## Features:
+It currently supports XY-WTH1 thermohigrometer as temperature/humidity acquisition device for data logging.
+It fetchs its data and stores with UNIX Epoch timestamp on the device's RAM.
+Later, that data can be retrieved using the read holding registers call (And then, flushed from RAM).
+
+The capture mode can be started and stopped writting on reserved 'digital output' addresses.
+
+It can drive the internal output relays of the thermohigrometer like local output device relays.
+
+The RTC can be set remotelly via modbus and it keeps the date/time with a holding battery in case of power failure.
+
+
+## Supports:
+
+Atmel Atmega328p, (aka arduino nano/mini) as slave devices using RS485 serial adapters.
+
+9600 bauds, 8, N, 1 RTU mode.
+
+##Requires:
+
+http://jeelabs.net/projects/cafe/wiki/RTClib
+
+https://github.com/yaacov/ArduinoModbusSlave
+
+(modpoll tool, optional) https://www.modbusdriver.com/modpoll.html
+
+## Notes:
 
 After factory reset the slave id is 1
 
