@@ -18,6 +18,7 @@ static Toggle blinker;
 
 unsigned char ledPin = 13;
 static unsigned char onpoll = 0;
+uint16_t pcounter = 0;
 
 void pollDrive() {
     if(commandTimer.event()) {
@@ -79,6 +80,7 @@ void setupResetDiag() {
     slave.setUnitAddress(id);
     termohigrometer.setup();
     //wdt_enable(WDTO_8S);
+    pcounter=0;
 }
 
 // default slave ID 
@@ -140,16 +142,33 @@ void setup()
     slave.begin(SERIAL_BAUDRATE);
 }
 
-void loop()
-{
+void mainRuntimeLevel() {
     // Listen for modbus requests on the serial port.
     // When a request is received it's going to get validated.
     // And if there is a function registered to the received function code, this function will be executed.
     slave.poll();
+}
+
+void notificationRuntimeLevel() {
+    termohigrometer.setCaptureEpoch(rtc.now().getEpoch());
     ledDrive();
     pollDrive();
-    termohigrometer.setCaptureEpoch(rtc.now().getEpoch());
+}
+
+void userspaceRuntimeLevel() {
     termohigrometer.update();
+}
+
+void loop() {
+    if (pcounter % 2 == 0) {
+        mainRuntimeLevel();
+    } else if (pcounter % 3 == 0) {
+        userspaceRuntimeLevel();
+    } else if (pcounter % 5 == 0) {
+        notificationRuntimeLevel();
+    }
+    
+    pcounter++;
     //wdt_reset();
 }
 

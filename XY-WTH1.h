@@ -7,7 +7,7 @@
 #define SSTX 11
 #define COMMAND_DELAY 300
 #define RX_BUFFER_SIZE 20
-#define RX_TIMEOUT_MS 50
+#define RX_TIMEOUT_MS 500
 #define CAPTURE_HOLD_SIZE 20
 #define TH_MEM_START 69
 
@@ -44,7 +44,6 @@ class XYWTH {
         boolean isHumidRelayOn() { return currentCapture.relayState[1] == 1; }
     protected:
         void waitReply();
-        void setBusy();
         char buffer[RX_BUFFER_SIZE];
         unsigned char readP;
         unsigned char capturing;
@@ -52,7 +51,7 @@ class XYWTH {
         CaptureRegister capture[CAPTURE_HOLD_SIZE];
         CaptureRegister currentCapture;
         Timer rxTimedOut;
-        void parseCapture();
+        boolean parseCapture();
         uint32_t currentEpoch;
         void clearBuffer();
         boolean isPrintable(uint8_t chr);
@@ -65,9 +64,11 @@ class XYWTH {
         int digitsToInt(char digits[]);
         int getNumber(char line[], uint8_t linelen);
         void processLine(char line[], uint8_t linelen);
+        boolean isDataLine(char line[], uint8_t linelen);
         void clearBuffer(char b[], uint8_t blen);
         void pushRegister(CaptureRegister& reg);
         void handleRelays(boolean isHumidity, boolean relayOFF);
+        void captureTX(const char command[]);
 };
 
 void XYWTH::reset() {
@@ -180,6 +181,10 @@ void XYWTH::pushRegister(CaptureRegister &reg) {
     captureP++;
 }
 
+boolean XYWTH::isDataLine(char line[], uint8_t linelen) {
+    return contains(line, "%", linelen, 1);
+}
+
 void XYWTH::processLine(char line[], uint8_t linelen) {
     boolean isHumidity = contains(line, "%", linelen, 1);
     boolean relayOFF = contains(line, "OFF", linelen, 3);
@@ -209,16 +214,20 @@ void XYWTH::processLine(char line[], uint8_t linelen) {
 }
 
 
-void  XYWTH::parseCapture() {
+boolean XYWTH::parseCapture() {
     waitReply();
     char line[RX_BUFFER_SIZE];
     clearBuffer(line, RX_BUFFER_SIZE);
     uint8_t startPos = 0;
+    boolean gotDataLine = false;
     while(copyLine(line, buffer, startPos, RX_BUFFER_SIZE)) {
         processLine(line, RX_BUFFER_SIZE);
+        if (isDataLine(line, RX_BUFFER_SIZE))
+            gotDataLine = true;
         // SERIAL_PORT.println();
     }
     clearBuffer();
+    return gotDataLine;
 }
 
 void XYWTH::update() {
@@ -245,32 +254,30 @@ void XYWTH::waitReply() {
     rxTimedOut.reset();
 }
 
-void XYWTH::enableTempRelay() {
-    if (isCapturing()) suspendCapture();
-    softSerial.print("T:ON");
+void XYWTH::captureTX(const char command[]) {
+    boolean wascapturing = isCapturing();
+    stopCapture();
+    softSerial.print(command);
     waitReply();
-    if (isCapturing()) resumeCapture();
+    startCapture();
+    while(!parseCapture());
+    if(!wascapturing) stopCapture();
+}
+
+void XYWTH::enableTempRelay() {
+    captureTX("T:ON");
 }
 
 void XYWTH::disableTempRelay() {
-    if (isCapturing()) suspendCapture();
-    softSerial.print("T:OFF");
-    waitReply();
-    if (isCapturing()) resumeCapture();
+    captureTX("T:OFF");
 }
 
 void XYWTH::enableHumidityRelay() {
-    if (isCapturing()) suspendCapture();
-    softSerial.print("H:ON");
-    waitReply();
-    if (isCapturing()) resumeCapture();
+    captureTX("H:ON");
 }
 
 void XYWTH::disableHumidityRelay() {
-    if (isCapturing()) suspendCapture();
-    softSerial.print("H:OFF");
-    waitReply();
-    if (isCapturing()) resumeCapture();
+    captureTX("H:OFF");
 }
 
 void XYWTH::setStopTemperature(float temp) {
