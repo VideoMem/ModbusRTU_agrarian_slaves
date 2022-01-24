@@ -2,15 +2,15 @@
 Firmware for small modbus RTU slave devices intended for agricultural automation and remote monitoring.
 
 ## Features:
-It currently supports XY-WTH1 thermohigrometer as temperature/humidity acquisition device for data logging.
-It fetchs its data and stores with UNIX Epoch timestamp on the device's RAM.
+It currently supports XY-WTH1 thermohygrometer as temperature/humidity acquisition device for data logging.
+It fetches its data and stores with UNIX Epoch timestamp on the device's RAM.
 Later, that data can be retrieved using the read holding registers call (And then, flushed from RAM).
 
-The capture mode can be started and stopped writting on reserved 'digital output' addresses.
+The capture mode can be started and stopped writing on reserved 'digital output' addresses.
 
-It can drive the internal output relays of the thermohigrometer like local output device relays.
+It can drive the internal output relays of the thermohygrometer like local output device relays.
 
-The RTC can be set remotelly via modbus and it keeps the date/time with a holding battery in case of power failure.
+The RTC can be set remotely via modbus, and it keeps the date/time with a holding battery in case of power failure.
 
 
 ## Supports:

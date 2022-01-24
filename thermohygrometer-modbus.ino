@@ -44,7 +44,7 @@ void poolNotify() {
 #include "RTC.h"
 #include "XY-WTH1.h"
 
-static XYWTH termohigrometer;
+static XYWTH thermohygrometer;
 
 // The position in the array determines the address. Position 0 will correspond to Coil, Discrete input or Input register 0.
 uint8_t digital_pins[] = {3, 4, 5, 6, 7, 8, 9, 12};    // Add the pins you want to read as a Discrete input.
@@ -78,7 +78,7 @@ void setupResetDiag() {
     uint8_t id;
     EEPROM.get(0, id);
     slave.setUnitAddress(id);
-    termohigrometer.setup();
+    thermohygrometer.setup();
     //wdt_enable(WDTO_8S);
     pcounter=0;
 }
@@ -150,13 +150,14 @@ void mainRuntimeLevel() {
 }
 
 void notificationRuntimeLevel() {
-    termohigrometer.setCaptureEpoch(rtc.now().getEpoch());
+    if (thermohygrometer.isCapturing())
+        thermohygrometer.setCaptureEpoch(rtc.now().getEpoch());
     ledDrive();
     pollDrive();
 }
 
 void userspaceRuntimeLevel() {
-    termohigrometer.update();
+    thermohygrometer.update();
 }
 
 void loop() {
@@ -190,13 +191,13 @@ uint8_t readDigital(uint8_t fc, uint16_t address, uint16_t length)
             for (int i = 0; i < length; i++) {
                 switch(address + i) {
                     case 20:
-                        slave.writeCoilToBuffer(i, termohigrometer.isTempRelayOn());
+                        slave.writeCoilToBuffer(i, thermohygrometer.isTempRelayOn());
                         break;
                     case 21:
-                        slave.writeCoilToBuffer(i, termohigrometer.isHumidRelayOn());
+                        slave.writeCoilToBuffer(i, thermohygrometer.isHumidRelayOn());
                         break;
                     case 22:
-                        slave.writeCoilToBuffer(i, termohigrometer.isCapturing());
+                        slave.writeCoilToBuffer(i, thermohygrometer.isCapturing());
                         break;
                 }
             }
@@ -246,25 +247,25 @@ uint8_t writeDigitalOut(uint8_t fc, uint16_t address, uint16_t length)
             if (slave.readCoilFromBuffer(i) == 1) {
                 switch (address + i) {
                     case 20:
-                        termohigrometer.enableTempRelay();
+                        thermohygrometer.enableTempRelay();
                         break;
                     case 21:
-                        termohigrometer.enableHumidityRelay();
+                        thermohygrometer.enableHumidityRelay();
                         break;
                     case 22:
-                        termohigrometer.startCapture();
+                        thermohygrometer.startCapture();
                         break;
                 }
             } else {
                 switch (address + i) {
                     case 20:
-                        termohigrometer.disableTempRelay();
+                        thermohygrometer.disableTempRelay();
                         break;
                     case 21:
-                        termohigrometer.disableHumidityRelay();
+                        thermohygrometer.disableHumidityRelay();
                         break;
                     case 22:
-                        termohigrometer.stopCapture();
+                        thermohygrometer.stopCapture();
                         break;
                 }
             }
@@ -312,18 +313,18 @@ uint8_t readMemory(uint8_t fc, uint16_t address, uint16_t length)
         } else if (address + i >= TH_MEM_START && address + i < TH_MEM_START + CAPTURE_HOLD_SIZE) {
             //handles temperature
             uint16_t offset = address + i - TH_MEM_START;
-            CaptureRegister reg = termohigrometer.getMark(offset);
+            CaptureRegister reg = thermohygrometer.getMark(offset);
             slave.writeRegisterToBuffer(i, reg.temperature);
         } else if (address + i >= TH_MEM_START + CAPTURE_HOLD_SIZE && address + i < TH_MEM_START + CAPTURE_HOLD_SIZE * 2) {
             //handles humidity
             uint16_t offset = address + i - (TH_MEM_START + CAPTURE_HOLD_SIZE);
-            CaptureRegister reg = termohigrometer.getMark(offset);
+            CaptureRegister reg = thermohygrometer.getMark(offset);
             slave.writeRegisterToBuffer(i, reg.humidity);
         } else if (address + i >= TH_MEM_START + CAPTURE_HOLD_SIZE * 2 && address + i < TH_MEM_START + CAPTURE_HOLD_SIZE * 4) {
             //handles timestamps
             uint16_t wordpos = address + i - (TH_MEM_START + CAPTURE_HOLD_SIZE * 2);
             uint16_t capturepos =  wordpos / 2;
-            CaptureRegister reg = termohigrometer.getMark(capturepos);
+            CaptureRegister reg = thermohygrometer.getMark(capturepos);
             if (wordpos % 2 == 0) {
                 slave.writeRegisterToBuffer(i, reg.epoch.nibbles[0]);
             } else {
