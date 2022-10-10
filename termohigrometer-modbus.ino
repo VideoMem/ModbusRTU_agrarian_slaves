@@ -18,6 +18,9 @@
     Updated 31-03-2020
     By Yorick Smilda
 
+    Updated 10-10-2022
+    Sebastian Wilwerth
+
     https://github.com/yaacov/ArduinoModbusSlave
 
 */
@@ -38,7 +41,7 @@
 #define SERIAL_PORT Serial   // Serial port to use for RS485 communication, change to the port you're using.
 #define FACTORY_RESET 2
 #define RELAY0 3
-#define RELAY1 4
+#define RELAY1 12
 
 
 // The position in the array determines the address. Position 0 will correspond to Coil, Discrete input or Input register 0.
@@ -64,11 +67,11 @@ unsigned char ledPin = 13;
 void setupResetDiag() {
     pinMode(FACTORY_RESET, INPUT_PULLUP);
     pinMode(FACTORY_RESET, INPUT);   
-    digitalWrite(RELAY0, 1);
-    digitalWrite(RELAY1, 1);    
-    pinMode(RELAY0, OUTPUT);  
-    pinMode(RELAY1, OUTPUT);  
-    pinMode(ledPin, OUTPUT);   
+    for (uint8_t r=0; r <= RELAY1; r++) {
+        digitalWrite(r, 1);
+        pinMode(r, OUTPUT);
+    }
+    pinMode(ledPin, OUTPUT);
     blinkTimer.setMS(BLINK_NO_ERROR);
     uint8_t id;
     EEPROM.get(0, id);
