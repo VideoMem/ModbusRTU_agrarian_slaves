@@ -11,7 +11,7 @@ class Timer {
  public: 
    Timer();
    void setMS(unsigned long ms);
-   void setS(unsigned int s);
+   void setS(unsigned long s);
    void reset();
    void enable();
    void disable();
@@ -19,6 +19,7 @@ class Timer {
    unsigned long valueMS();
    unsigned long valueS();
    int event();
+   unsigned long preset_value();
    
  private:
   void check();

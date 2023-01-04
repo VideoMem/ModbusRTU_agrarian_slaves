@@ -58,9 +58,13 @@ void Timer::setMS(unsigned long value) {
    enabled = 1;
 }
 
-void Timer::setS(unsigned int s) {
+void Timer::setS(unsigned long s) {
   unsigned long aux = s * 1000;
   setMS(aux);
+}
+
+unsigned long Timer::preset_value() {
+    return preset;
 }
 
 void Timer::reset() {
