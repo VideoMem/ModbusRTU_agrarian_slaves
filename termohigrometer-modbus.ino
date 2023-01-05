@@ -148,9 +148,6 @@ void readPulseDriveValues() {
         int addr_off = DATA_START_ADDR + (digital_pins_size * sizeof(unsigned long)) + offset;
         unsigned long time_on = EEPROM_readlong(addr_on);
         unsigned long time_off = EEPROM_readlong(addr_off);
-        if (time_on != BLINK_IRRIGATION_MAIN) {
-            //assertErrorLoop();
-        }
         pulse_drives[i].setMS_on(time_on);
         pulse_drives[i].setMS_off(time_off);
     }
