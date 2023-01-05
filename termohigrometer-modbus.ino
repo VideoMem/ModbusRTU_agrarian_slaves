@@ -105,6 +105,13 @@ void EEPROM_writelong(uint16_t address, unsigned long value) {
         assertErrorLoop();
 }
 
+void ledDriveDefaultValues() {
+    EEPROM_writelong(DATA_START_ADDR + (9 * sizeof(unsigned long)), (unsigned long) BLINK_NO_ERROR);
+    EEPROM_writelong(DATA_START_ADDR + ((digital_pins_size + 9) * sizeof(unsigned long)), (unsigned long) BLINK_NO_ERROR);
+    EEPROM.put(10, 1);
+}
+
+
 void defaultPulseDriveValues() {
     unsigned long def_on_off = BLINK_IRRIGATION_MAIN;
 
@@ -113,16 +120,13 @@ void defaultPulseDriveValues() {
         EEPROM_writelong(addr, def_on_off);
     }
 
-    EEPROM_writelong(DATA_START_ADDR + (9 * sizeof(unsigned long)), (unsigned long) BLINK_NO_ERROR);
-    EEPROM_writelong(DATA_START_ADDR + ((digital_pins_size + 9) * sizeof(unsigned long)), (unsigned long) BLINK_NO_ERROR);
-
-
     for(uint8_t addr = 1; addr <= digital_pins_size; addr++) {
         EEPROM.put(addr, 0);
     }
 
     EEPROM.put(6, 1);
-    EEPROM.put(10, 1);
+
+    ledDriveDefaultValues();
 }
 
 void assertErrorLoop() {
