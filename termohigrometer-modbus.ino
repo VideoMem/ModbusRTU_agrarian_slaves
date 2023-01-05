@@ -25,14 +25,12 @@
 
 #include <EEPROM.h>
 #include <ModbusSlave.h>
-#include "Toggle.h"
-#include "Timers.h"
 #include "Duty.h"
 // all times are in ms
-#define BLINK_IRRIGATION_MAIN 315000
-#define BLINK_NO_ERROR 500
-#define BLINK_ON_ERROR 50
-#define BLINK_FACTORY_RESET 3000
+#define BLINK_IRRIGATION_MAIN 300000UL
+#define BLINK_NO_ERROR 500UL
+#define BLINK_ON_ERROR 50UL
+#define BLINK_FACTORY_RESET 3000UL
 
 // The Modbus slave ID, change to the ID you want to use.
 #define SLAVE_ID 1
@@ -67,42 +65,44 @@ uint8_t analog_pins_size = sizeof(analog_pins) / sizeof(analog_pins[0]);    // G
 // Modbus object declaration
 Modbus slave(SERIAL_PORT, SLAVE_ID, RS485_CTRL_PIN);
 
-Timer blinkTimer;
-Toggle blinker;
-Timer pulseTimer;
-Toggle pulser;
 Duty pulse_drives[DIGITAL_PINS_SIZE];
 uint8_t outModes[DIGITAL_PINS_SIZE];
 unsigned char ledPin = 13;
 unsigned char pulsePin = 9;
+uint8_t loopcnt = 0;
 
-void EEPROM_writeint(int address, int value)  {
-    EEPROM.write(address, highByte(value));
-    EEPROM.write(address + 1, lowByte(value));
+void EEPROM_writeint(uint16_t address, uint16_t value)  {
+    EEPROM.write(address + 1, highByte(value));
+    EEPROM.write(address, lowByte(value));
+    uint16_t check = EEPROM_readint(address);
+    if (check != value)
+        assertErrorLoop();
 }
 
-unsigned int EEPROM_readint(int address) {
-    unsigned int word = word(EEPROM.read(address), EEPROM.read(address + 1));
+uint16_t EEPROM_readint(uint16_t address) {
+    unsigned int word = word(EEPROM.read(address + 1), EEPROM.read(address));
     return word;
 }
 
-unsigned long EEPROM_readlong(int address) {
+unsigned long EEPROM_readlong(uint16_t address) {
     //use word read function for reading upper part
-    unsigned int dword = EEPROM_readint(address);
-    //shift read word up
-    dword = dword << 16;
+    unsigned long dword = EEPROM_readint(address + sizeof(uint16_t));
+    dword <<= 16;
     // read lower word from EEPROM and OR it into double word
-    dword = dword | EEPROM_readint(address + 2);
+    dword = dword | EEPROM_readint(address);
     return dword;
 }
 
-void EEPROM_writelong(int address, unsigned long value) {
+void EEPROM_writelong(uint16_t address, unsigned long value) {
+    unsigned long original_value = value;
+    uint16_t word_h = value >> 16;
+    uint16_t word_l = value & 0xFFFF;
     //truncate upper part and write lower part into EEPROM
-    EEPROM_writeint(address+2, word(value));
-    //shift upper part down
-    value = value >> 16;
-    //truncate and write
-    EEPROM_writeint(address, word(value));
+    EEPROM_writeint(address + sizeof(uint16_t), word_h);
+    EEPROM_writeint(address, word_l);
+    unsigned long check = EEPROM_readlong(address);
+    if (check != original_value)
+        assertErrorLoop();
 }
 
 void defaultPulseDriveValues() {
@@ -113,30 +113,46 @@ void defaultPulseDriveValues() {
         EEPROM_writelong(addr, def_on_off);
     }
 
+    EEPROM_writelong(DATA_START_ADDR + (9 * sizeof(unsigned long)), (unsigned long) BLINK_NO_ERROR);
+    EEPROM_writelong(DATA_START_ADDR + ((digital_pins_size + 9) * sizeof(unsigned long)), (unsigned long) BLINK_NO_ERROR);
+
+
     for(uint8_t addr = 1; addr <= digital_pins_size; addr++) {
         EEPROM.put(addr, 0);
     }
 
-    EEPROM.put(5, 1);
+    EEPROM.put(6, 1);
+    EEPROM.put(10, 1);
+}
+
+void assertErrorLoop() {
+    while (true) {
+        digitalWrite(ledPin, 1);
+        delay(BLINK_ON_ERROR);
+        digitalWrite(ledPin, 0);
+        delay(BLINK_ON_ERROR);
+    }
 }
 
 void readPulseDriveValues() {
-    unsigned long value = 0;
-    size_t off_time_start_addr = (digital_pins_size * sizeof(unsigned long)) + 1;
-    size_t off_time_end_addr = 2 * digital_pins_size * sizeof(unsigned long);
-
     for(uint8_t i = 0; i < digital_pins_size; i++) {
-        int offset = i * sizeof(unsigned long);
+        uint8_t offset = i * sizeof(unsigned long);
         int addr_on = DATA_START_ADDR + offset;
         int addr_off = DATA_START_ADDR + (digital_pins_size * sizeof(unsigned long)) + offset;
-        pulse_drives[i].setMS_on(EEPROM_readlong(addr_on));
-        pulse_drives[i].setMS_off(EEPROM_readlong(addr_off));
+        unsigned long time_on = EEPROM_readlong(addr_on);
+        unsigned long time_off = EEPROM_readlong(addr_off);
+        if (time_on != BLINK_IRRIGATION_MAIN) {
+            //assertErrorLoop();
+        }
+        pulse_drives[i].setMS_on(time_on);
+        pulse_drives[i].setMS_off(time_off);
     }
 
     for(uint8_t i = 1; i <= digital_pins_size; i++ ) {
-        EEPROM.get(i, outModes[i]);
+        uint8_t value = 0;
+        EEPROM.get(i, value);
+        outModes[i - 1] = value;
     }
-
 }
 
 // default slave ID
@@ -147,8 +163,7 @@ void factoryDefaults() {
 }
 
 void setupResetDiag() {
-    pinMode(FACTORY_RESET, INPUT_PULLUP);
-    pinMode(FACTORY_RESET, INPUT);
+
     for (uint8_t i=0; i <= digital_pins_size; i++) {
         digitalWrite(digital_pins[i], 1);
         pinMode(digital_pins[i], OUTPUT);
@@ -156,13 +171,27 @@ void setupResetDiag() {
     pinMode(ledPin, OUTPUT);
     pinMode(pulsePin, OUTPUT);
     pinMode(RS485_CTRL_PIN, OUTPUT);
-    blinkTimer.setMS(BLINK_NO_ERROR);
-    pulseTimer.setMS(BLINK_IRRIGATION_MAIN);
 
     uint8_t id;
     EEPROM.get(0, id);
     slave.setUnitAddress(id);
     readPulseDriveValues();
+}
+
+void check_factory_reset_pin() {
+    pinMode(FACTORY_RESET, INPUT_PULLUP);
+    pinMode(FACTORY_RESET, INPUT);
+
+    loopcnt = 20;
+    while (loopcnt != 0 && digitalRead(FACTORY_RESET) == 0) {
+        digitalWrite(ledPin, 1);
+        delay(BLINK_ON_ERROR);
+        digitalWrite(ledPin, 0);
+        delay(BLINK_ON_ERROR);
+        loopcnt--;
+    }
+    if (digitalRead(FACTORY_RESET) == 0)
+        factoryDefaults();
 }
 
 
@@ -173,21 +202,9 @@ void setup() {
         pinMode(analog_pins[i], INPUT);
     }
 
+    check_factory_reset_pin();
     setupResetDiag();
 
-    if (digitalRead(FACTORY_RESET) == 0) {
-        blinkTimer.setMS(BLINK_FACTORY_RESET);
-        digitalWrite(ledPin, 1);
-        do {
-            blinkTimer.update();
-        } while (!blinkTimer.event());
-        if (digitalRead(FACTORY_RESET) == 0) 
-            factoryDefaults();
-        blinkTimer.setMS(BLINK_NO_ERROR);
-        blinkTimer.reset();  
-    }
-    
-    
     // Register functions to call when a certain function code is received.
     slave.cbVector[CB_READ_COILS] = readDigital;
     slave.cbVector[CB_READ_DISCRETE_INPUTS] = readDigital;
@@ -202,22 +219,28 @@ void setup() {
 }
 
 void pulseUpdate() {
-    for(uint8_t i; i < digital_pins_size; i++) {
+    for(uint8_t i = 0; i < digital_pins_size; i++) {
         pulse_drives[i].update();
         if(outModes[i] == 1)
             digitalWrite(digital_pins[i], pulse_drives[i].value());
     }
 }
 
-void loop()
-{
+void refresh() {
+    readPulseDriveValues();
+}
+
+void loop() {
     // Listen for modbus requests on the serial port.
     // When a request is received it's going to get validated.
     // And if there is a function registered to the received function code, this function will be executed.
     slave.poll();
-    ledDrive();
+    //ledDrive();
     //pulseDrive();
+    if (loopcnt % 100 == 0)
+        refresh();
     pulseUpdate();
+    loopcnt++;
 }
 
 // Modbus handler functions
@@ -287,19 +310,15 @@ uint8_t writeDigitalOut(uint8_t fc, uint16_t address, uint16_t length) {
 // Handle the function code Read Holding Registers (FC=03) and write back the values from the EEPROM (holding registers).
 uint8_t readMemory(uint8_t fc, uint16_t address, uint16_t length) {
 
-    if (address < DATA_START_ADDR && address + length > DATA_START_ADDR) {
-        return STATUS_ILLEGAL_DATA_VALUE;
-    }
-
     // Read the requested EEPROM registers.
     for (int i = 0; i < length; i++) {
-        if (address + i < DATA_START_ADDR) {
+        if ((address + i) < DATA_START_ADDR) {
             uint8_t value;
             EEPROM.get(address + i, value);
             slave.writeRegisterToBuffer(i, value);
         } else {
             uint16_t value16;
-            EEPROM.get(DATA_START_ADDR + (i * 2), value16);
+            EEPROM.get(address + (i * sizeof(uint16_t)), value16);
             slave.writeRegisterToBuffer(i, value16);
         }
     }
@@ -314,7 +333,7 @@ uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length) {
     // Write the received data to EEPROM.
     for (int i = 0; i < length; i++) {
 
-        if (address + i < DATA_START_ADDR) {
+        if ((address + i) < DATA_START_ADDR) {
             uint8_t value = slave.readRegisterFromBuffer(i);
             if (address + i  == 0) {
                 if ((value < 1 || value > 247)) {
@@ -330,33 +349,4 @@ uint8_t writeMemory(uint8_t fc, uint16_t address, uint16_t length) {
     }
 
     return STATUS_OK;
-}
-
-
-void ledDrive() {
-    if(blinker.value() == true)
-        digitalWrite(ledPin, HIGH);
-    else
-        digitalWrite(ledPin, LOW);
-
-    if(blinkTimer.event()) {
-        blinker.change();
-        blinkTimer.reset();
-    }
-    
-    blinkTimer.update();
-}
-
-void pulseDrive() {
-    if(pulser.value() == true)
-        digitalWrite(pulsePin, HIGH);
-    else
-        digitalWrite(pulsePin, LOW);
-
-    if(pulseTimer.event()) {
-        pulser.change();
-        pulseTimer.reset();
-    }
-
-    pulseTimer.update();
 }

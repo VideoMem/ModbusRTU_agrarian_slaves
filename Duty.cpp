@@ -8,21 +8,18 @@ Duty::Duty() {
 }
 
 void Duty::reset() {
-    Ton.enable();
     Ton.reset();
-    Toff.enable();
     Toff.reset();
     Output.reset();
 }
 
 void Duty::setMS(unsigned long ms) {
-   Toff.setMS(ms);
-   Ton.setMS(ms);
+    setMS_on(ms);
+    setMS_off(ms);
 }
 
 void Duty::setS(unsigned long s) {
-   Toff.setS(s);
-   Ton.setS(s);
+    setMS(s * 1000);
 }
 
 void Duty::setMS_on(unsigned long ms) {
@@ -30,15 +27,15 @@ void Duty::setMS_on(unsigned long ms) {
 }
 
 void Duty::setS_on(unsigned long s) {
-   Ton.setS(s);
+   setMS_on(s * 1000);
 }
 
 void Duty::setMS_off(unsigned long ms) {
-   Toff.setMS(ms);
+   Toff.setMS(ms + Ton.preset_value());
 }
 
 void Duty::setS_off(unsigned long s) {
-   Toff.setS(s);
+   setMS_off(s * 1000);
 }
 
 void Duty::enable() {
@@ -50,13 +47,13 @@ void Duty::disable() {
 }
 
 void Duty::sync_on()  {
+    Ton.reset();
     Toff.reset();
     if (enabled)
         Output.set();
 }
 
 void Duty::sync_off()  {
-    Ton.reset();
     if (enabled)
         Output.reset();
 }
@@ -65,19 +62,19 @@ void Duty::update() {
     Ton.update();
     Toff.update();
 
-    if (Ton.event() && !Output.value()) {
-        sync_on();
+    if (Ton.event() && Output.value() == true) {
+        sync_off();
     }
 
-    if (Toff.event() && Output.value()) {
-        sync_off();
+    if (Toff.event()) {
+        sync_on();
     }
 
     if (!enabled)
         Output.reset();
 }
 
-int Duty::value() {
+bool Duty::value() {
     return Output.value();
 }
 

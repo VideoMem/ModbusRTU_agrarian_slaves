@@ -24,7 +24,7 @@ class Duty {
    void sync_on();
    void sync_off();
    void update();
-   int value();
+   bool value();
 
  private:
   Timer Ton;
