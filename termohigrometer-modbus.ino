@@ -56,7 +56,7 @@ uint8_t analog_pins[] = {A0, A1, A2, A3, A4, A5};        // Add the pins you wan
 // Byte 1 to 10 are pulse drive modes (0 default, 1 pulse drive)
 //      6 and 10 are in pulse drive mode by default, so pin 9 and 13 (led) will blink at configured intervals
 // From data addr 101 and over, there are the time on / time off constants for each drive
-// Each register is 32 bit long and stores the preset time in milliseconds
+// Each register is a 32 bit unsigned long and stores the preset time in milliseconds
 // First 10 registers are for time on values for each drive
 // The same applies for the following 10 that are for the time off values.
 
