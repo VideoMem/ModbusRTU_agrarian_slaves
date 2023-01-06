@@ -60,7 +60,7 @@ uint8_t analog_pins[] = {A0, A1, A2, A3, A4, A5};        // Add the pins you wan
 // First 10 registers are for time on values for each drive
 // The same applies for the following 10 that are for the time off values.
 
-// # factoryDefaults setings using modpoll tool
+// # factoryDefaults settings using modpoll tool
 //
 // modpoll -b 9600 -m rtu -a 1 -t 4:int -r 101 -c 20  -p none -4 1  /dev/ttyUSB0 300000 300000 300000 300000 300000 300000 300000 300000 300000 500 300000 300000 300000 300000 300000 300000 300000 300000 300000 500
 //
@@ -68,7 +68,10 @@ uint8_t analog_pins[] = {A0, A1, A2, A3, A4, A5};        // Add the pins you wan
 //
 // modpoll -b 9600 -m rtu -a 1 -t 4:hex  -r 137 -c 2  -p none -4 1  /dev/ttyUSB0 200 0
 //
-
+// # same for off time on addr 177
+//
+// modpoll -b 9600 -m rtu -a 1 -t 4:hex  -r 177 -c 2  -p none -4 1  /dev/ttyUSB0 200 0
+//
 
 
 // You shouldn't have to change anything below this to get this example to work
@@ -250,8 +253,6 @@ void loop() {
     // When a request is received it's going to get validated.
     // And if there is a function registered to the received function code, this function will be executed.
     slave.poll();
-    //ledDrive();
-    //pulseDrive();
     if (loopcnt % 100 == 0)
         refresh();
     pulseUpdate();
