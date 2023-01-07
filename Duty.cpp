@@ -10,7 +10,7 @@ Duty::Duty() {
 void Duty::reset() {
     Ton.reset();
     Toff.reset();
-    Output.reset();
+    Output.set();
 }
 
 void Duty::setMS(unsigned long ms) {
@@ -50,19 +50,19 @@ void Duty::sync_on()  {
     Ton.reset();
     Toff.reset();
     if (enabled)
-        Output.set();
+        Output.reset();
 }
 
 void Duty::sync_off()  {
     if (enabled)
-        Output.reset();
+        Output.set();
 }
 
 void Duty::update() {
     Ton.update();
     Toff.update();
 
-    if (Ton.event() && Output.value() == true) {
+    if (Ton.event() && Output.value() == false) {
         sync_off();
     }
 

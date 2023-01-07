@@ -141,8 +141,6 @@ void defaultPulseDriveValues() {
         EEPROM.put(addr, 0);
     }
 
-    EEPROM.put(6, 1);
-
     ledDriveDefaultValues();
 }
 
@@ -157,9 +155,9 @@ void assertErrorLoop() {
 
 void readPulseDriveValues() {
     for(uint8_t i = 0; i < digital_pins_size; i++) {
-        uint8_t offset = i * sizeof(unsigned long);
-        int addr_on = DATA_START_ADDR + offset;
-        int addr_off = DATA_START_ADDR + (digital_pins_size * sizeof(unsigned long)) + offset;
+        uint16_t offset = i * sizeof(unsigned long);
+        uint16_t addr_on = DATA_START_ADDR + offset;
+        uint16_t addr_off = DATA_START_ADDR + (digital_pins_size * sizeof(unsigned long)) + offset;
         unsigned long time_on = EEPROM_readlong(addr_on);
         unsigned long time_off = EEPROM_readlong(addr_off);
         pulse_drives[i].setMS_on(time_on);
@@ -312,7 +310,7 @@ uint8_t writeDigitalOut(uint8_t fc, uint16_t address, uint16_t length) {
         if (outModes[address + i] == 0) {
             digitalWrite(digital_pins[address + i], slave.readCoilFromBuffer(i));
         } else {
-            if (slave.readCoilFromBuffer(i) == 0)
+            if (slave.readCoilFromBuffer(i) == 1)
                 pulse_drives[address + i].sync_off();
             else
                 pulse_drives[address + i].sync_on();
